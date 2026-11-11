@@ -4,6 +4,8 @@ const path = require('path');
 const { exec } = require('child_process');
 
 const PORT = 3000;
+const ROOT_DIR = path.resolve(__dirname, '..');
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -22,7 +24,7 @@ const server = http.createServer((req, res) => {
     reqPath = '/index.html';
   }
 
-  const filePath = path.join(__dirname, reqPath);
+  const filePath = path.join(ROOT_DIR, reqPath);
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
