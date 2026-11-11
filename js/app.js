@@ -39,6 +39,7 @@ class App {
       timerId: null
     };
 
+    window.app = this;
     this.init();
   }
 
@@ -355,14 +356,27 @@ class App {
     if (islandId === 'all') {
       this.world.resetOverview();
       this.updateIslandHUD(null);
+      if (this.playerController) {
+        this.playerController.isFollowCamera = false;
+        this.updateFollowButtonUI(false);
+      }
     } else {
       this.world.focusIsland(islandId);
       this.updateIslandHUD(islandId);
       // 同步傳送玩家到該島
       if (this.playerController) {
         this.playerController.teleportToIsland(islandId);
+        this.updateFollowButtonUI(true);
       }
     }
+  }
+
+  updateFollowButtonUI(isFollowing) {
+    const followBtn = document.getElementById('btn-toggle-follow');
+    if (!followBtn) return;
+    followBtn.style.background = isFollowing ? '#38BDF8' : 'white';
+    followBtn.style.color = isFollowing ? 'white' : '#1E293B';
+    followBtn.title = isFollowing ? '鏡頭跟隨中（點擊切回自由視角）' : '切換鏡頭跟隨角色';
   }
 
   updateIslandHUD(islandId) {
@@ -589,13 +603,16 @@ class App {
 
     // 視角跟隨切換
     const followBtn = document.getElementById('btn-toggle-follow');
-    followBtn.addEventListener('click', () => {
-      if (window.sound) window.sound.playPop();
-      const isFollowing = this.playerController.toggleFollowCamera();
-      followBtn.style.background = isFollowing ? '#38BDF8' : 'white';
-      followBtn.style.color = isFollowing ? 'white' : '#1E293B';
-      followBtn.title = isFollowing ? '鏡頭跟隨中（點擊切回自由視角）' : '切換鏡頭跟隨角色';
-    });
+    if (followBtn) {
+      this.updateFollowButtonUI(this.playerController ? this.playerController.isFollowCamera : true);
+      followBtn.addEventListener('click', () => {
+        if (window.sound) window.sound.playPop();
+        if (this.playerController) {
+          const isFollowing = this.playerController.toggleFollowCamera();
+          this.updateFollowButtonUI(isFollowing);
+        }
+      });
+    }
 
     // 番茄鐘按鈕
     document.getElementById('btn-pomo-toggle').addEventListener('click', () => this.togglePomodoro());

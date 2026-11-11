@@ -1,4 +1,4 @@
-// 佛光大學 應用科技與設計學院 — 3D 大學生冒險角色控制器 (WASD + 滑鼠尋路 + 寶箱互動)
+// 佛光大學 應用科技與設計學院 — 3D 大學生冒險角色控制器 (WASD + 滑鼠尋路 + 鏡頭自動跟隨 + 寶箱互動)
 
 class PlayerController {
   constructor(playerMesh, world, onChestInteract) {
@@ -17,7 +17,7 @@ class PlayerController {
     this.targetPos = null; // 滑鼠尋路目標
     this.velocity = new THREE.Vector3();
     this.moveSpeed = 0.16;
-    this.isFollowCamera = false;
+    this.isFollowCamera = true; // 預設開啟鏡頭自動跟隨
 
     // 鄰近寶箱提示
     this.nearbyChest = null;
@@ -28,6 +28,18 @@ class PlayerController {
   initEvents() {
     window.addEventListener('keydown', (e) => {
       const code = e.code;
+      const isMoveKey = (
+        code === 'KeyW' || code === 'ArrowUp' ||
+        code === 'KeyS' || code === 'ArrowDown' ||
+        code === 'KeyA' || code === 'ArrowLeft' ||
+        code === 'KeyD' || code === 'ArrowRight'
+      );
+
+      if (isMoveKey) {
+        // 玩家進行操控時自動啟動鏡頭跟隨
+        this.enableFollowCamera();
+      }
+
       if (code === 'KeyW' || code === 'ArrowUp') this.keys.forward = true;
       if (code === 'KeyS' || code === 'ArrowDown') this.keys.backward = true;
       if (code === 'KeyA' || code === 'ArrowLeft') this.keys.left = true;
@@ -52,8 +64,17 @@ class PlayerController {
     });
   }
 
+  // 開啟鏡頭跟隨並同步介面按鈕狀態
+  enableFollowCamera() {
+    this.isFollowCamera = true;
+    if (window.app && typeof window.app.updateFollowButtonUI === 'function') {
+      window.app.updateFollowButtonUI(true);
+    }
+  }
+
   // 設定滑鼠點擊尋路目標點
   moveTo(point) {
+    this.enableFollowCamera();
     this.targetPos = new THREE.Vector3(point.x, this.mesh.position.y, point.z);
   }
 
@@ -65,6 +86,7 @@ class PlayerController {
     this.mesh.position.set(ix, iy + 0.7, iz + 2.5);
     this.targetPos = null;
     this.velocity.set(0, 0, 0);
+    this.enableFollowCamera();
   }
 
   // 開關視角跟隨
@@ -110,24 +132,44 @@ class PlayerController {
     const ud = this.mesh.userData;
     if (isMoving) {
       ud.walkTime = (ud.walkTime || 0) + 0.22;
-      ud.legLeft.rotation.x = Math.sin(ud.walkTime) * 0.65;
-      ud.legRight.rotation.x = -Math.sin(ud.walkTime) * 0.65;
+      if (ud.legLeft) ud.legLeft.rotation.x = Math.sin(ud.walkTime) * 0.65;
+      if (ud.legRight) ud.legRight.rotation.x = -Math.sin(ud.walkTime) * 0.65;
       this.mesh.position.y = 0.7 + Math.abs(Math.sin(ud.walkTime * 2)) * 0.08;
     } else {
-      ud.legLeft.rotation.x = 0;
-      ud.legRight.rotation.x = 0;
+      if (ud.legLeft) ud.legLeft.rotation.x = 0;
+      if (ud.legRight) ud.legRight.rotation.x = 0;
       this.mesh.position.y = 0.7;
     }
 
-    // 鏡頭跟隨
+    // 鏡頭自動平滑跟隨玩家移動
     if (this.isFollowCamera && this.world) {
-      const targetCamPos = new THREE.Vector3(
-        this.mesh.position.x,
-        this.mesh.position.y + 7.5,
-        this.mesh.position.z + 11.5
-      );
-      this.world.camera.position.lerp(targetCamPos, 0.08);
-      this.world.controls.target.lerp(this.mesh.position, 0.08);
+      // 當場景正在進行跨島切換過渡時暫緩跟隨，等過渡完成後立即同步跟隨
+      if (!this.world.isTransitioning) {
+        // 計算鏡頭與控制點目前的相對偏移量
+        const currentDiff = new THREE.Vector3().subVectors(
+          this.world.camera.position,
+          this.world.controls.target
+        );
+
+        // 若距離太遠（例如剛從全景俯瞰切換過來），重設為舒適的冒險俯瞰視角
+        if (currentDiff.length() > 28 || currentDiff.length() < 5) {
+          currentDiff.set(0, 9, 13);
+        } else {
+          // 維持適當仰角，避免鏡頭穿入地面
+          currentDiff.y = Math.max(5.5, Math.min(currentDiff.y, 16));
+        }
+
+        const targetCamPos = new THREE.Vector3().addVectors(this.mesh.position, currentDiff);
+        const targetLookPos = new THREE.Vector3(
+          this.mesh.position.x,
+          this.mesh.position.y + 0.85,
+          this.mesh.position.z
+        );
+
+        // 使用 lerp 實現絲滑柔順的鏡頭跟隨
+        this.world.camera.position.lerp(targetCamPos, 0.1);
+        this.world.controls.target.lerp(targetLookPos, 0.1);
+      }
     }
 
     // 檢測鄰近寶箱
