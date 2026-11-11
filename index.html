@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>佛光大學 應用科技與設計學院 — 3D 微縮學習島 (旗艦升級版)</title>
+  <link rel="stylesheet" href="./css/style.css">
+  
+  <!-- 核心 3D 引擎與控制器 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+  <!-- 應用資料與功能模組 (免本地伺服器，支援直接雙擊開啟與伺服器模式) -->
+  <script src="./js/data.js"></script>
+  <script src="./js/audio.js"></script>
+  <script src="./js/entities3d.js"></script>
+  <script src="./js/player.js"></script>
+  <script src="./js/world3d.js"></script>
+  <script src="./js/app.js"></script>
+</head>
+<body>
+
+  <!-- 3D WebGL Canvas 容器 -->
+  <div id="canvas-container"></div>
+
+  <!-- 前端 UI 懸浮互動層 -->
+  <div id="ui-layer">
+    <!-- 頂部導航工具列 -->
+    <header class="glass-panel interactive">
+      <div class="brand-area">
+        <span class="brand-badge">FGU 佛光大學</span>
+        <div>
+          <div class="brand-title">
+            <span>🏝️ 應用科技與設計學院 3D 微縮學習島</span>
+          </div>
+          <div class="brand-sub">微縮美學 ‧ 角色冒險 ‧ 大學生自習工具箱</div>
+        </div>
+      </div>
+
+      <!-- 六角島嶼切換頁籤 -->
+      <nav class="island-tabs">
+        <button class="tab-btn active" data-island="central">🏛️ 學院總島</button>
+        <button class="tab-btn" data-island="it">💻 資訊應用島</button>
+        <button class="tab-btn" data-island="design">🎨 產媒設計島</button>
+        <button class="tab-btn" data-island="comm">📡 數位傳播島</button>
+        <button class="tab-btn" data-island="arch">🌿 建築環境島</button>
+        <button class="tab-btn" data-island="all">🌐 全景俯瞰</button>
+      </nav>
+
+      <!-- 晝夜黃昏切換 -->
+      <div class="time-switcher">
+        <button class="time-btn active" data-time="day">☀️ 晝</button>
+        <button class="time-btn" data-time="sunset">🌅 夕</button>
+        <button class="time-btn" data-time="night">🌙 夜</button>
+      </div>
+
+      <!-- 右側動作按鈕 -->
+      <div class="actions-area">
+        <button class="action-btn btn-tree" id="btn-open-skilltree">🎓 技能樹</button>
+        <button class="action-btn btn-primary" id="btn-open-workshop">✨ 精靈工坊</button>
+        <button class="action-btn btn-warm" id="btn-open-board">📋 學習看板</button>
+        <button class="btn-icon-only" id="btn-toggle-follow" title="切換鏡頭跟隨角色">🚶</button>
+        <button class="btn-icon-only" id="btn-toggle-audio" title="切換微縮氛圍音效">🎵</button>
+      </div>
+    </header>
+
+    <!-- 寶箱走近提示 HUD -->
+    <div id="chest-prompt-hud" class="interactive"></div>
+
+    <!-- 懸浮番茄鐘專注計時器小部件 -->
+    <div class="glass-panel pomodoro-widget interactive" id="pomodoro-widget">
+      <div>
+        <div style="font-size: 11px; font-weight: 700; color: #64748B;" id="pomo-mode-label">🍅 專注自習中</div>
+        <div class="pomo-time" id="pomo-display">25:00</div>
+      </div>
+      <div class="pomo-controls">
+        <button class="pomo-btn btn-start" id="btn-pomo-toggle">開始</button>
+        <button class="pomo-btn" id="btn-pomo-reset">重置</button>
+      </div>
+    </div>
+
+    <!-- 底部資訊列 -->
+    <div class="bottom-bar">
+      <div class="glass-panel island-info-card interactive" id="island-info-hud">
+        <!-- 內容由 app.js 動態渲染 -->
+      </div>
+
+      <!-- 鍵盤操控提示卡片 -->
+      <div class="glass-panel controls-hint-card interactive">
+        <div style="font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 4px;">
+          <span>🎮</span> 冒險者操控指南：
+        </div>
+        <div>移動：<span class="key-badge">W</span> <span class="key-badge">A</span> <span class="key-badge">S</span> <span class="key-badge">D</span> 或 <span class="key-badge">方向鍵</span> / 滑鼠點擊地面</div>
+        <div>互動：靠近金色寶箱按 <span class="key-badge">E</span> 鍵開啟</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗 1：島長 RPG 深度對話系統 -->
+  <div class="modal-overlay" id="mayor-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <div class="modal-avatar-circle" id="mayor-modal-avatar">🦉</div>
+          <div>
+            <div class="modal-title" id="mayor-modal-title">島長名稱</div>
+            <div class="modal-subtitle" id="mayor-modal-subtitle">身分頭銜</div>
+          </div>
+        </div>
+        <button class="close-btn close-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="dialogue-bubble" id="mayor-dialogue-text">正在聆聽島長問候……</div>
+        <div style="font-size: 12px; font-weight: 700; color: #64748B; margin-bottom: 8px;">快捷情報話題：</div>
+        <div class="topic-pills">
+          <button class="topic-pill" data-topic="intro">👋 島長打招呼</button>
+          <button class="topic-pill" data-topic="news">📢 最新系所情報</button>
+          <button class="topic-pill" data-topic="curriculum">🗺️ 專業修課地圖</button>
+          <button class="topic-pill" data-topic="quest">🎯 今日學習任務</button>
+          <button class="topic-pill" data-topic="secret">🤫 島長私房心事</button>
+        </div>
+        <div class="chat-input-row">
+          <input type="text" id="mayor-chat-input" placeholder="有什麼課業或生活想問島長嗎？輸入問題後送出……">
+          <button id="mayor-chat-send">送出</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗 2：「精靈工坊」動物系混合生物精靈合成器 -->
+  <div class="modal-overlay" id="workshop-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <div class="modal-avatar-circle" style="background: #F0F9FF;">✨</div>
+          <div>
+            <div class="modal-title">精靈工坊・創造動物系混合島民</div>
+            <div class="modal-subtitle">自由混搭生物五官特徵，為小島增添專屬學習夥伴</div>
+          </div>
+        </div>
+        <button class="close-btn close-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div style="font-size: 13px; font-weight: 800; color: #1E293B; margin-bottom: 8px;">1. 選擇基礎生物臉龐：</div>
+        <div class="workshop-grid" id="workshop-heads"></div>
+
+        <div style="font-size: 13px; font-weight: 800; color: #1E293B; margin-bottom: 8px;">2. 選擇動物混合特徵（開箱可解鎖隱藏飾品）：</div>
+        <div class="workshop-grid" id="workshop-features"></div>
+
+        <div style="font-size: 13px; font-weight: 800; color: #1E293B; margin-bottom: 8px;">3. 選擇毛色溫暖主題：</div>
+        <div class="workshop-grid" id="workshop-colors"></div>
+
+        <div style="font-size: 13px; font-weight: 800; color: #1E293B; margin-bottom: 8px;">4. 設定島民資料與居住地：</div>
+        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+          <input type="text" id="workshop-spirit-name" placeholder="小精靈暱稱（例：橘波波）" style="flex: 1; padding: 10px 14px; border-radius: 12px; border: 1.5px solid #CBD5E1; font-size: 13px; outline: none;">
+          <select id="workshop-island-select" style="padding: 10px 14px; border-radius: 12px; border: 1.5px solid #CBD5E1; font-size: 13px; outline: none; background: white;"></select>
+        </div>
+
+        <input type="text" id="workshop-spirit-goal" placeholder="學習心願或一句話（例：正在挑戰寫出 3D 網站！）" style="width: 100%; padding: 10px 14px; border-radius: 12px; border: 1.5px solid #CBD5E1; font-size: 13px; outline: none; margin-bottom: 16px;">
+
+        <button class="action-btn btn-primary" id="btn-spawn-spirit" style="width: 100%; justify-content: center; padding: 14px; font-size: 15px;">
+          🪄 合成並召喚精靈登島！
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗 3：四系修課闖關技能樹 -->
+  <div class="modal-overlay" id="skill-tree-modal">
+    <div class="modal-box" style="max-width: 780px;">
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <div class="modal-avatar-circle" style="background: #D1FAE5;">🎓</div>
+          <div>
+            <div class="modal-title">佛光應科院 四系修課闖關技能樹</div>
+            <div class="modal-subtitle">資應 ‧ 產媒 ‧ 傳播 ‧ 建築 大一至大四核心專業導航</div>
+          </div>
+        </div>
+        <button class="close-btn close-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="skill-dept-tabs" id="skill-dept-tabs">
+          <button class="skill-dept-btn active" data-dept="it">💻 資訊應用學系</button>
+          <button class="skill-dept-btn" data-dept="design">🎨 產品與媒體設計系</button>
+          <button class="skill-dept-btn" data-dept="comm">📡 傳播學系</button>
+          <button class="skill-dept-btn" data-dept="arch">🌿 建築環境設計學程</button>
+        </div>
+
+        <div id="skill-tree-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗 4：複合式學習看板（最新公告 + 學習便利貼） -->
+  <div class="modal-overlay" id="study-board-modal">
+    <div class="modal-box" style="max-width: 720px;">
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <div class="modal-avatar-circle" style="background: #FEF3C7;">📋</div>
+          <div>
+            <div class="modal-title">佛光應科院 學習交流與即時情報看板</div>
+            <div class="modal-subtitle">同步官網即時動態 ‧ 學生學習便利貼打卡交流</div>
+          </div>
+        </div>
+        <button class="close-btn close-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div style="margin-bottom: 20px;">
+          <div style="font-size: 13.5px; font-weight: 800; color: #0F172A; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <span>📢</span> 佛光大學 應用科技與設計學院 即時公告
+          </div>
+          <div id="official-news-list" style="background: #F8FAFC; border-radius: 14px; border: 1.5px solid #E2E8F0; max-height: 160px; overflow-y: auto;"></div>
+        </div>
+
+        <div style="font-size: 13.5px; font-weight: 800; color: #0F172A; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span>📌</span> 同學學習便利貼（3D 地圖實體旗標）
+          </div>
+        </div>
+        <div class="notes-container" id="study-notes-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 16px;"></div>
+
+        <div style="background: #FFFBEB; border: 1.5px dashed #F59E0B; border-radius: 16px; padding: 14px;">
+          <div style="font-size: 13px; font-weight: 800; color: #92400E; margin-bottom: 8px;">✍️ 在 3D 小島釘一張我的學習便利貼：</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+            <input type="text" id="note-author-input" placeholder="你的暱稱 / 系級" style="padding: 8px 12px; border-radius: 10px; border: 1px solid #FCD34D; font-size: 12px; outline: none; background: white;">
+            <select id="note-cat-select" style="padding: 8px 12px; border-radius: 10px; border: 1px solid #FCD34D; font-size: 12px; outline: none; background: white;">
+              <option value="自習打卡">自習打卡</option>
+              <option value="找隊友">競賽揪團 / 找隊友</option>
+              <option value="學習筆記">靈感與心得分享</option>
+              <option value="課業提問">發問求助</option>
+            </select>
+            <select id="note-island-select" style="padding: 8px 12px; border-radius: 10px; border: 1px solid #FCD34D; font-size: 12px; outline: none; background: white;">
+              <option value="central">中央學院廣場</option>
+              <option value="it">資訊應用島</option>
+              <option value="design">產媒設計島</option>
+              <option value="comm">數位傳播島</option>
+              <option value="arch">建築環境島</option>
+            </select>
+          </div>
+          <input type="text" id="note-title-input" placeholder="便利貼標題（例：尋找一起做期末專案的夥伴）" style="width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid #FCD34D; font-size: 12px; outline: none; margin-bottom: 8px; background: white;">
+          <textarea id="note-content-input" rows="2" placeholder="詳細內容……" style="width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid #FCD34D; font-size: 12px; outline: none; margin-bottom: 8px; font-family: inherit; background: white;"></textarea>
+          <button class="action-btn btn-warm" id="btn-submit-note" style="width: 100%; justify-content: center; padding: 10px;">
+            📌 釘選發布至 3D 小島
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗 5：寶箱開啟成就卡 -->
+  <div class="modal-overlay" id="chest-reward-modal">
+    <div class="modal-box" style="max-width: 440px; text-align: center;">
+      <div class="modal-header">
+        <div class="modal-title-area" style="margin: 0 auto;">
+          <div class="modal-title" style="color: #F59E0B; font-size: 19px;">🎉 探索寶箱開啟成功！</div>
+        </div>
+        <button class="close-btn close-modal-btn">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <div style="font-size: 56px; margin-bottom: 12px;" id="chest-reward-emoji">🎓</div>
+        <div style="font-size: 18px; font-weight: 900; color: #0F172A; margin-bottom: 6px;" id="chest-reward-title">獲得榮譽勳章</div>
+        <div style="font-size: 13.5px; color: #475569; line-height: 1.6; margin-bottom: 20px;" id="chest-reward-desc">已成功解鎖專屬飾品！</div>
+        <button class="action-btn btn-primary close-modal-btn" style="width: 100%; justify-content: center; padding: 12px;">太棒了，前往工坊試穿！</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗 6：島民快速互動卡片 -->
+  <div class="modal-overlay" id="villager-modal">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <div class="modal-avatar-circle" id="villager-modal-avatar" style="background: #F0FDF4;">🐾</div>
+          <div>
+            <div class="modal-title" id="villager-modal-title">島民名稱</div>
+            <div class="modal-subtitle" id="villager-modal-subtitle">創作者資訊</div>
+          </div>
+        </div>
+        <button class="close-btn close-modal-btn">✕</button>
+      </div>
+      <div class="modal-body" id="villager-modal-content"></div>
+    </div>
+  </div>
+
+</body>
+</html>
